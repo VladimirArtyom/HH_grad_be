@@ -39,11 +39,11 @@ func main() {
 
 	mux.Handle("GET /api/teams", http.HandlerFunc(C_GetTeamsHandler))
 	//mux.Handle("GET /api/grades/{id}", C_AuthMiddleware(http.HandlerFunc(C_GetGradesHandler)))
-	mux.Handle("POST /api/jury/grades/{id}", (http.HandlerFunc(C_SaveGradesHandler)))
+	mux.Handle("POST /api/jury/grades/{id}", C_AuthMiddleware(http.HandlerFunc(C_SaveGradesHandler)))
 
-	mux.Handle("GET /api/jury/grades", (http.HandlerFunc(C_GetAllGradesJury)))
+	mux.Handle("GET /api/jury/grades", C_AuthMiddleware(http.HandlerFunc(C_GetAllGradesJury)))
 
-	mux.Handle("GET /api/export/grades", (http.HandlerFunc(ExportGradesHandler)))
+	mux.Handle("GET /api/export/grades", C_AuthMiddleware(http.HandlerFunc(ExportGradesHandler)))
 
 	log.Printf("Server running on http://localhost:8081")
 	err := http.ListenAndServe(":8081", CORSMiddleware(mux))
