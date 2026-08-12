@@ -190,7 +190,7 @@ func C_SaveGradesHandler(w http.ResponseWriter, r *http.Request) {
 		req.SecurityPatent, req.ScalDeploy, req.Comment)
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf(`{"error ": "%s"}`, err.Error()), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
