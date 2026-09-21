@@ -14,6 +14,9 @@ type DBSecret struct {
 	DBName   string `json:"dbname"`
 }
 
+const juryTeamIDKey contextKey = "jury_team_id"
+const roleKey contextKey = "jury_role"
+
 func CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*") // Restrict to your frontend URL in prod
@@ -32,7 +35,7 @@ func CORSMiddleware(next http.Handler) http.Handler {
 // https://aws.github.io/aws-sdk-go-v2/docs/getting-started/
 
 func main() {
-	Connect()
+	Connect_Offline()
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/login", http.HandlerFunc(C_Login))

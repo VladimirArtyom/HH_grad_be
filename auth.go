@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -10,7 +11,8 @@ import (
 )
 
 type C_Claims struct {
-	JuryTeamID int `json:"jury_team_id"`
+	JuryTeamID int    `json:"jury_team_id"`
+	Role       string `json:"jury_role"`
 	jwt.RegisteredClaims
 }
 
@@ -22,12 +24,23 @@ func c_getJWTSecret() []byte {
 	return []byte(secret)
 }
 
+func sendJSONError(w http.ResponseWriter, message string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	fmt.Fprintf(w, `{"error": %s}`, message)
+}
+
 func C_AuthMiddleware(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
+		if auth == "" {
+			sendJSONError(w, "Missing Authorization header", http.StatusUnauthorized)
+			return
+		}
 		if !strings.HasPrefix(auth, "Bearer ") {
-			http.Error(w, `{"error": "Missing Token"}`, http.StatusUnauthorized)
+			sendJSONError(w, "Invalid Authorization format", http.StatusUnauthorized)
 			return
 		}
 
@@ -39,13 +52,13 @@ func C_AuthMiddleware(next http.Handler) http.Handler {
 		token, err := jwt.ParseWithClaims(token_string, claims, func(t *jwt.Token) (interface{}, error) {
 			return jwtSecret, nil
 		})
-
 		if err != nil || !token.Valid {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
+			sendJSONError(w, "Invalid or expired token", http.StatusUnauthorized)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), juryTeamIDKey, claims.JuryTeamID)
+		ctx := context.WithValue(r.Context(), roleKey, claims.Role)
+		ctx = context.WithValue(ctx, juryTeamIDKey, claims.JuryTeamID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 
 	})

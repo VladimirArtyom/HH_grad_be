@@ -12,6 +12,21 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+const accordance string = "accordance_with_track"
+const usp string = "unique_selling_point"
+const poc string = "poc"
+const security string = "security_patentability"
+const technical string = "technical_feasibility"
+const scalability string = "scalability_deployability"
+
+var roleAllowedFields = map[string][]string{
+	"admin":              {accordance, usp, poc, security, technical, scalability},
+	"solution_architect": {accordance, usp, poc, security, technical, scalability},
+	"business":           {accordance, usp, scalability},
+	"tech_security":      {accordance, usp, poc, security, technical},
+	"tech_hcl":           {accordance, usp, poc, security, technical},
+}
+
 type C_ParticipantTeam struct {
 	ID    int    `json:"id"`
 	Name  string `json:"name"`
@@ -57,15 +72,18 @@ type ExcelColumn struct {
 func C_Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
+		fmt.Println(err)
+		http.Error(w, `{"error":"Invalid payload"} `, http.StatusBadRequest)
 		return
 	}
 
 	var juryTeamID int
 	var dbPassword string
+	var role string
+	var juryName string
 
-	fmt.Println(req.Username)
-	err := C_Pool.QueryRow(r.Context(), "SELECT jury_team_id, password FROM jury_members WHERE username=$1", req.Username).Scan(&juryTeamID, &dbPassword)
+	const sql_query = "select jt.id, jm.password, jt.role, jm.name from jury_members as jm INNER JOIN jury_teams jt on jm.id=jt.id WHERE jm.name=$1"
+	err := C_Pool.QueryRow(r.Context(), sql_query, req.Username).Scan(&juryTeamID, &dbPassword, &role, &juryName)
 	fmt.Println(juryTeamID, dbPassword)
 	if err != nil {
 		http.Error(w, `{"error":"Invalid credentials"}`, http.StatusUnauthorized)
@@ -79,8 +97,9 @@ func C_Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jwtSecret := c_getJWTSecret()
-	claims := &Claims{
+	claims := &C_Claims{
 		JuryTeamID:       juryTeamID,
+		Role:             role,
 		RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour))},
 	}
 
@@ -88,7 +107,7 @@ func C_Login(w http.ResponseWriter, r *http.Request) {
 	tokenString, _ := token.SignedString(jwtSecret)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
+	json.NewEncoder(w).Encode(map[string]string{"token": tokenString, "role": role})
 }
 
 func C_GetTeamsHandler(w http.ResponseWriter, r *http.Request) {
@@ -125,6 +144,7 @@ func C_GetGradesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	juryTeamID := r.Context().Value(juryTeamIDKey).(int)
+	fmt.Println(juryTeamID)
 	//juryTeamID := 1
 
 	var sql_statement string = `SELECT accordance_with_track, unique_selling_point, technical_feasibility, poc, security_patentability, scalability_deployability, comment FROM grades WHERE jury_team_id=$1 AND participant_team_id=$2`
@@ -154,9 +174,9 @@ func C_SaveGradesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	juryTeamId := r.Context().Value(juryTeamIDKey).(int)
+	juryRole := r.Context().Value(roleKey).(string)
 	//juryTeamId := 1
-
-	var req GradeReq
+	var req C_GradeReq
 	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -172,6 +192,65 @@ func C_SaveGradesHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"Scores must be between 0 and 5"}`, http.StatusBadRequest)
 		return
 	}
+	allowedFields, exists := roleAllowedFields[juryRole]
+	isAllowed := func(field string) bool {
+		for _, f := range allowedFields {
+			if f == field {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !exists {
+		http.Error(w, `{"error": "Forbidden: Invalid role"}`, http.StatusForbidden)
+		return
+	}
+
+	var existingGrade C_GradeReq
+	var existingComment string
+	var sql_existing_statement string = `SELECT accordance_with_track, unique_selling_point, technical_feasibility, poc, security_patentability, scalability_deployability, comment 
+		FROM grades where jury_team_id=$1 AND participant_team_id=$2
+	`
+	err = C_Pool.QueryRow(r.Context(), sql_existing_statement, juryTeamId, participantTeamId).Scan(
+		&existingGrade.AccordanceWTrack, &existingGrade.UniqueSellingPoint,
+		&existingGrade.TechnicalFeasibility, &existingGrade.POC,
+		&existingGrade.SecurityPatent, &existingGrade.ScalDeploy,
+		&existingComment,
+	)
+	if err != nil && err != pgx.ErrNoRows {
+		fmt.Printf("Error %v", err)
+		http.Error(w, `{"error" : "Database error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if isAllowed(accordance) {
+		existingGrade.AccordanceWTrack = req.AccordanceWTrack
+	}
+
+	if isAllowed(poc) {
+		existingGrade.POC = req.POC
+	}
+
+	if isAllowed(scalability) {
+		existingGrade.ScalDeploy = req.ScalDeploy
+	}
+
+	if isAllowed(security) {
+		existingGrade.SecurityPatent = req.SecurityPatent
+	}
+
+	if isAllowed(usp) {
+		existingGrade.UniqueSellingPoint = req.UniqueSellingPoint
+	}
+
+	if isAllowed(technical) {
+		existingGrade.TechnicalFeasibility = req.TechnicalFeasibility
+	}
+
+	if req.Comment != "" {
+		existingComment = req.Comment
+	}
 
 	var sql_statement string = `INSERT INTO grades (jury_team_id, participant_team_id, accordance_with_track, unique_selling_point, technical_feasibility, poc, security_patentability, scalability_deployability, comment)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -185,9 +264,9 @@ func C_SaveGradesHandler(w http.ResponseWriter, r *http.Request) {
 
 		comment = EXCLUDED.comment`
 	_, err = C_Pool.Exec(r.Context(), sql_statement, juryTeamId,
-		participantTeamId, req.AccordanceWTrack,
-		req.UniqueSellingPoint, req.TechnicalFeasibility, req.POC,
-		req.SecurityPatent, req.ScalDeploy, req.Comment)
+		participantTeamId, existingGrade.AccordanceWTrack,
+		existingGrade.UniqueSellingPoint, existingGrade.TechnicalFeasibility,
+		existingGrade.POC, existingGrade.SecurityPatent, existingGrade.ScalDeploy, existingComment)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error ": "%s"}`, err.Error()), http.StatusInternalServerError)
