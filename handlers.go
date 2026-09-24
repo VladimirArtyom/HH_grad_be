@@ -85,7 +85,9 @@ func C_Login(w http.ResponseWriter, r *http.Request) {
 	const sql_query = "select jt.id, jm.password, jt.role, jm.name from jury_members as jm INNER JOIN jury_teams jt on jm.id=jt.id WHERE jm.name=$1"
 	err := C_Pool.QueryRow(r.Context(), sql_query, req.Username).Scan(&juryTeamID, &dbPassword, &role, &juryName)
 	fmt.Println(juryTeamID, dbPassword)
+	fmt.Println("Hellodude")
 	if err != nil {
+		fmt.Println(err)
 		http.Error(w, `{"error":"Invalid credentials"}`, http.StatusUnauthorized)
 		return
 	}
@@ -164,6 +166,44 @@ func C_GetGradesHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(pGrade)
+}
+func C_PostTeamsHandler(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, `{"error": "No impl"}`, http.StatusInternalServerError)
+	return
+
+}
+
+func C_PutTeamsHandler(w http.ResponseWriter, r *http.Request) {
+	teamId, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, `{"error": "Invalid team ID"}`, http.StatusBadRequest)
+		return
+	}
+	var req C_ParticipantTeam
+
+	err = json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, `{"erorr": "Invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	sql_statement := "UPDATE participant_teams SET name=$1, track=$2 WHERE id =$3 RETURNING id"
+	var updatedID int
+	err = dbPool.QueryRow(r.Context(), sql_statement, req.Name, req.Track, teamId).Scan(&updatedID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			http.Error(w, fmt.Sprintf(`{"error":"Failed to update team: %s"}`, err.Error()), http.StatusNotFound)
+			return
+		}
+		http.Error(w, fmt.Sprintf(`{"error": "Failed to update team: %s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"team":    C_ParticipantTeam{ID: updatedID, Name: req.Name, Track: req.Track},
+	})
 }
 
 func C_SaveGradesHandler(w http.ResponseWriter, r *http.Request) {

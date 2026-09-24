@@ -35,12 +35,17 @@ func CORSMiddleware(next http.Handler) http.Handler {
 // https://aws.github.io/aws-sdk-go-v2/docs/getting-started/
 
 func main() {
-	Connect_Offline()
+	//Connect_Offline()
+	Connect()
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/login", http.HandlerFunc(C_Login))
 
 	mux.Handle("GET /api/teams", http.HandlerFunc(C_GetTeamsHandler))
+
+	mux.Handle("POST /api/teams", http.HandlerFunc(C_PostTeamsHandler))
+	mux.Handle("PUT /api/teams/{id}", http.HandlerFunc(C_PutTeamsHandler))
+
 	//mux.Handle("GET /api/grades/{id}", C_AuthMiddleware(http.HandlerFunc(C_GetGradesHandler)))
 	mux.Handle("POST /api/jury/grades/{id}", C_AuthMiddleware(http.HandlerFunc(C_SaveGradesHandler)))
 
