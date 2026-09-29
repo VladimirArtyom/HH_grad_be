@@ -63,9 +63,7 @@ func Connect() string {
 	if err != nil {
 		log.Fatalf("Error parsing secret JSON: %v", err)
 	}
-	fmt.Println("%s", dbSecret.Username)
-	fmt.Println("%s", dbSecret.Host)
-	fmt.Println("%s", dbSecret.DBName)
+
 	dbSecret.DBName = "hacknusa_db_26"
 	constURL := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=require",
 		dbSecret.Username,

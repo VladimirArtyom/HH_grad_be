@@ -2,13 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -69,7 +72,32 @@ type ExcelColumn struct {
 	Comment              string
 }
 
+func C_DeleteTeamHandler(w http.ResponseWriter, r *http.Request) {
+
+	juryRole, ok := r.Context().Value(roleKey).(string)
+	if !ok || juryRole != "admin" {
+		http.Error(w, `{"error": "Forbidden"}`, http.StatusForbidden)
+		return
+	}
+	teamIdStr := r.PathValue("id")
+	teamId, err := strconv.Atoi(teamIdStr)
+	if err != nil {
+		http.Error(w, `{"error":"Invalid team Id"}`, http.StatusBadRequest)
+		return
+	}
+	const sqlQuery = "Delete from participant_teams WHERE id=$1 "
+	_, err = C_Pool.Exec(r.Context(), sqlQuery, teamId)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to delete"}`, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
 func C_Login(w http.ResponseWriter, r *http.Request) {
+
 	var req LoginReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		fmt.Println(err)
@@ -82,10 +110,8 @@ func C_Login(w http.ResponseWriter, r *http.Request) {
 	var role string
 	var juryName string
 
-	const sql_query = "select jt.id, jm.password, jt.role, jm.name from jury_members as jm INNER JOIN jury_teams jt on jm.id=jt.id WHERE jm.name=$1"
+	const sql_query = "select jt.id, jm.password, jt.role, jm.name from jury_members as jm INNER JOIN jury_teams jt on jm.jury_team_id=jt.id WHERE jm.name=$1"
 	err := C_Pool.QueryRow(r.Context(), sql_query, req.Username).Scan(&juryTeamID, &dbPassword, &role, &juryName)
-	fmt.Println(juryTeamID, dbPassword)
-	fmt.Println("Hellodude")
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, `{"error":"Invalid credentials"}`, http.StatusUnauthorized)
@@ -138,7 +164,6 @@ func C_GetTeamsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(teams)
 }
-
 func C_GetGradesHandler(w http.ResponseWriter, r *http.Request) {
 	participantTeamId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
@@ -168,12 +193,58 @@ func C_GetGradesHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(pGrade)
 }
 func C_PostTeamsHandler(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, `{"error": "No impl"}`, http.StatusInternalServerError)
-	return
+	juryRole, ok := r.Context().Value(roleKey).(string)
+	if !ok || juryRole != "admin" {
+		http.Error(w, `{"error": "Forbidden"}`, http.StatusForbidden)
+		return
+	}
+
+	var req C_ParticipantTeam
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error": "Invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	req.Track = strings.TrimSpace(req.Track)
+
+	if req.Name == "" || req.Track == "" {
+		http.Error(w, `{"error":"Invalid Payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	const sqlStatement = "INSERT INTO participant_teams (id, name, track)VALUES ($1, $2, $3) RETURNING id"
+	var newId int
+
+	err := C_Pool.QueryRow(r.Context(), sqlStatement, req.ID, req.Name, req.Track).Scan(&newId)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			http.Error(w, err.Error(), http.StatusAccepted) //`{"error":"Team name already exists"}`, http.StatusConflict)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"team": C_ParticipantTeam{
+			ID: newId, Name: req.Name, Track: req.Track,
+		},
+	})
 
 }
 
 func C_PutTeamsHandler(w http.ResponseWriter, r *http.Request) {
+	juryRole, ok := r.Context().Value(roleKey).(string)
+	if !ok || juryRole != "admin" {
+		http.Error(w, `{"error": "Forbidden:"}`, http.StatusForbidden)
+		return
+	}
+
 	teamId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.Error(w, `{"error": "Invalid team ID"}`, http.StatusBadRequest)

@@ -7,7 +7,7 @@ import (
 )
 
 type DBSecret struct {
-	Username string `json:"username`
+	Username string `json:"username"`
 	Password string `json:"password"`
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
@@ -52,6 +52,10 @@ func main() {
 	mux.Handle("GET /api/jury/grades", C_AuthMiddleware(http.HandlerFunc(C_GetAllGradesJury)))
 
 	mux.Handle("GET /api/export/grades", C_AuthMiddleware(http.HandlerFunc(ExportGradesHandler)))
+
+	mux.Handle("POST /api/adm/teams", C_AuthMiddleware(http.HandlerFunc(C_PostTeamsHandler)))
+	mux.Handle("DELETE /api/adm/teams/{id}", C_AuthMiddleware(http.HandlerFunc(C_DeleteTeamHandler)))
+	mux.Handle("PUT /api/adm/teams/{id}", C_AuthMiddleware(http.HandlerFunc(C_PutTeamsHandler)))
 
 	log.Printf("Server running on http://localhost:8081")
 	err := http.ListenAndServe(":8081", CORSMiddleware(mux))
