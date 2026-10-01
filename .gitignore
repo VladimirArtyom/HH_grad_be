@@ -4,3 +4,4 @@ sda
 docker-compose.yml
 migrations
 
+Makefile

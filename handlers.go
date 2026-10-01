@@ -26,8 +26,8 @@ var roleAllowedFields = map[string][]string{
 	"admin":              {accordance, usp, poc, security, technical, scalability},
 	"solution_architect": {accordance, usp, poc, security, technical, scalability},
 	"business":           {accordance, usp, scalability},
-	"tech_security":      {accordance, usp, poc, security, technical},
-	"tech_hcl":           {accordance, usp, poc, security, technical},
+	"tech_security":      {poc, security, technical},
+	"tech_hcl":           {accordance, usp, poc, security, technical, scalability},
 }
 
 type C_ParticipantTeam struct {
@@ -207,7 +207,11 @@ func C_PostTeamsHandler(w http.ResponseWriter, r *http.Request) {
 
 	req.Name = strings.TrimSpace(req.Name)
 	req.Track = strings.TrimSpace(req.Track)
-
+	fmt.Println(req.ID)
+	if req.ID == 0 {
+		http.Error(w, `{"error":"Invalid Payload"}`, http.StatusBadRequest)
+		return
+	}
 	if req.Name == "" || req.Track == "" {
 		http.Error(w, `{"error":"Invalid Payload"}`, http.StatusBadRequest)
 		return
