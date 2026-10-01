@@ -43,8 +43,8 @@ func main() {
 
 	mux.Handle("GET /api/teams", http.HandlerFunc(C_GetTeamsHandler))
 
-	mux.Handle("POST /api/teams", http.HandlerFunc(C_PostTeamsHandler))
-	mux.Handle("PUT /api/teams/{id}", http.HandlerFunc(C_PutTeamsHandler))
+	mux.Handle("POST /api/adm/teams", C_AuthMiddleware(http.HandlerFunc(C_PostTeamsHandler)))
+	mux.Handle("PUT /api/adm/teams/{id}", C_AuthMiddleware(http.HandlerFunc(C_PutTeamsHandler)))
 
 	//mux.Handle("GET /api/grades/{id}", C_AuthMiddleware(http.HandlerFunc(C_GetGradesHandler)))
 	mux.Handle("POST /api/jury/grades/{id}", C_AuthMiddleware(http.HandlerFunc(C_SaveGradesHandler)))
@@ -53,9 +53,7 @@ func main() {
 
 	mux.Handle("GET /api/export/grades", C_AuthMiddleware(http.HandlerFunc(ExportGradesHandler)))
 
-	mux.Handle("POST /api/adm/teams", C_AuthMiddleware(http.HandlerFunc(C_PostTeamsHandler)))
 	mux.Handle("DELETE /api/adm/teams/{id}", C_AuthMiddleware(http.HandlerFunc(C_DeleteTeamHandler)))
-	mux.Handle("PUT /api/adm/teams/{id}", C_AuthMiddleware(http.HandlerFunc(C_PutTeamsHandler)))
 
 	log.Printf("Server running on http://localhost:8081")
 	err := http.ListenAndServe(":8081", CORSMiddleware(mux))
